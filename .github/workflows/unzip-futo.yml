@@ -1,0 +1,57 @@
+name: Traer FUTO Keyboard
+
+# Clona el repo de FUTO (con sus submodulos) directo en GitHub y lo copia a este repo.
+# Asi no hace falta subir un ZIP de mas de 25 MB.
+on:
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: "Repo a traer"
+        default: "https://github.com/futo-org/android-keyboard"
+      ref:
+        description: "Rama o etiqueta (vacio = la rama principal)"
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  traer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clonar FUTO con submodulos
+        run: |
+          git lfs install --skip-repo
+          BR=""
+          if [ -n "${{ inputs.ref }}" ]; then BR="-b ${{ inputs.ref }}"; fi
+          git clone --depth 1 $BR --recurse-submodules --shallow-submodules --jobs 4 "${{ inputs.repo }}" /tmp/src
+          cd /tmp/src
+          git submodule foreach --recursive 'git lfs pull || true'
+
+      - name: Limpiar lo que no sirve
+        run: |
+          cd /tmp/src
+          # Quitar toda la informacion de git (los submodulos pasan a ser carpetas normales)
+          find . -name .git -prune -exec rm -rf {} +
+          find . -name .gitattributes -delete
+          rm -f .gitmodules
+          # Cosas de GitHub/GitLab/servidores de FUTO que no aportan a la app
+          rm -rf .github .gitlab-ci.yml .ci
+          rm -f sendZulipMessage.sh uploadNightly.sh uploadNightlyBranch.sh syncTranslations.sh setUpPropertiesCI.sh
+          # GitHub no deja subir archivos de mas de 100 MB
+          BIG=$(find . -type f -size +95M)
+          if [ -n "$BIG" ]; then echo "::error::Archivos demasiado grandes:"; echo "$BIG"; exit 1; fi
+
+      - name: Copiar a este repo y subir
+        run: |
+          rsync -a /tmp/src/ ./
+          mkdir -p 0-sort-uploads && touch 0-sort-uploads/.gitkeep
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add -A -f
+          if git diff --cached --quiet; then echo "Nada que subir"; exit 0; fi
+          git commit -q -m "Traer FUTO Keyboard"
+          git push
