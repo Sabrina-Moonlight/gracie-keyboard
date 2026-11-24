@@ -54,4 +54,8 @@ jobs:
           git add -A -f
           if git diff --cached --quiet; then echo "Nada que subir"; exit 0; fi
           git commit -q -m "Traer FUTO Keyboard"
-          git push
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin "${{ github.ref_name }}" && git push && exit 0
+            echo "Reintento $i"; sleep 10
+          done
+          exit 1
