@@ -77,8 +77,8 @@ private fun Context.isDefaultIMECurrent(): Boolean {
 
 private fun Context.isDoublePackage(): Boolean {
     val value = Settings.Secure.getString(contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD)
-    val standalonePackage = "org.futo.inputmethod.latin"
-    val playstorePackage = "org.futo.inputmethod.latin.playstore"
+    val standalonePackage = "com.gracie.keyboard"
+    val playstorePackage = "com.gracie.keyboard.playstore"
 
     return (value.startsWith("$standalonePackage/") && packageName == playstorePackage) || (value.startsWith("$playstorePackage/") && packageName == standalonePackage)
 }
@@ -233,8 +233,10 @@ class SettingsActivity : ComponentActivity(), DynamicThemeProviderOwner {
             }
         }
 
-        lifecycleScope.launch {
-            checkForUpdateAndSaveToPreferences(applicationContext)
+        if (org.futo.inputmethod.latin.BuildConfig.UPDATE_CHECKING) {
+            lifecycleScope.launch {
+                checkForUpdateAndSaveToPreferences(applicationContext)
+            }
         }
 
         lifecycleScope.launch {

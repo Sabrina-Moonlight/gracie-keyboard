@@ -155,7 +155,7 @@ public class DictionaryFacilitatorImpl implements DictionaryFacilitator {
         // values are ad-hoc and chosen without any particular care or methodology.
         public static final float WEIGHT_FOR_MOST_PROBABLE_LANGUAGE = 1.0f;
         public static final float WEIGHT_FOR_GESTURING_IN_NOT_MOST_PROBABLE_LANGUAGE = 0.3f;
-        public static final float WEIGHT_FOR_TYPING_IN_NOT_MOST_PROBABLE_LANGUAGE = 0.8f;
+        public static final float WEIGHT_FOR_TYPING_IN_NOT_MOST_PROBABLE_LANGUAGE = 0.6f;
 
         /**
          * The locale associated with the dictionary group.
@@ -274,6 +274,8 @@ public class DictionaryFacilitatorImpl implements DictionaryFacilitator {
 
     @Override
     public void onEmailTyped(String email) {
+        // Gracie's Keyboard: no se guardan correos escritos.
+        if (true) return;
         SettingsValues settings = Settings.getInstance().getCurrent();
         if(!settings.isPersonalizationEnabled() || settings.mInputAttributes.mNoLearning) return;
 
@@ -387,7 +389,7 @@ public class DictionaryFacilitatorImpl implements DictionaryFacilitator {
             subDictTypesToUse.add(Dictionary.TYPE_USER_HISTORY);
         }
 
-        if(usePersonalizedDicts && (forceReloadAllDictionaries || mEmailDictionary == null)) {
+        if(false && usePersonalizedDicts && (forceReloadAllDictionaries || mEmailDictionary == null)) {
             if(mEmailDictionary != null) mEmailDictionary.close();
             mEmailDictionary = new EmailDictionary(context);
         }else if(!usePersonalizedDicts && mEmailDictionary != null) {
@@ -826,8 +828,17 @@ public class DictionaryFacilitatorImpl implements DictionaryFacilitator {
             if(dictionaryGroup.mConfidence > maxConfidence) maxConfidence = dictionaryGroup.mConfidence;
         }
 
-        for(DictionaryGroup dictionaryGroup : mDictionaryGroups) {
-            if(dictionaryGroup.mConfidence >= maxConfidence) {
+        // The first group is the language of the current keyboard. It stays the favorite unless
+        // another language clearly leads (2 or more words in a row more than the keyboard's one).
+        final int primaryConfidence = mDictionaryGroups.isEmpty() ? 0 : mDictionaryGroups.get(0).mConfidence;
+        final boolean primaryLeads = maxConfidence < primaryConfidence + 2;
+
+        for(int i = 0; i < mDictionaryGroups.size(); i++) {
+            final DictionaryGroup dictionaryGroup = mDictionaryGroups.get(i);
+            final boolean mostProbable = primaryLeads
+                    ? (i == 0)
+                    : (dictionaryGroup.mConfidence >= maxConfidence);
+            if(mostProbable) {
                 dictionaryGroup.mWeightForTypingInLocale = DictionaryGroup.WEIGHT_FOR_MOST_PROBABLE_LANGUAGE;
                 dictionaryGroup.mWeightForGesturingInLocale = DictionaryGroup.WEIGHT_FOR_MOST_PROBABLE_LANGUAGE;
             } else {

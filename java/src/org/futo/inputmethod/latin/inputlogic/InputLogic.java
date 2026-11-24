@@ -2024,6 +2024,12 @@ public final class InputLogic {
         }
 
         if (TextUtils.isEmpty(suggestion)) return;
+        // Gracie's Keyboard: no aprender correos, direcciones web ni cosas que parecen contraseñas
+        // (palabras con números o símbolos).
+        for (int i = 0; i < suggestion.length(); i++) {
+            final char c = suggestion.charAt(i);
+            if (Character.isDigit(c) || "@/\\:#$%^&*+=<>|~`_".indexOf(c) >= 0) return;
+        }
         final boolean wasAutoCapitalized =
                 mWordComposer.wasAutoCapitalized() && !mWordComposer.isMostlyCaps();
         final long timeStampInSeconds = TimeUnit.MILLISECONDS.toSeconds(

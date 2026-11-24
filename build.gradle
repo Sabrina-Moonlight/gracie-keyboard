@@ -107,6 +107,8 @@ final def translationsWithoutEngValues = { final String path ->
                             .replaceAll(/\\"/, '"')
                             .replaceAll(/\\'/, "'")
 
+                    content = content.replace('FUTO Keyboard', "Gracie's Keyboard").replace('FUTO Spell Checker', "Gracie's Spell Checker")
+
                     if (content.startsWith("&quot;")) {
                         content = content.substring(6)
                     } else if (content.startsWith('\\"')) {
@@ -201,8 +203,8 @@ android {
         versionName getVersionName()
         versionCode getVersionCode()
 
-        applicationId 'org.futo.inputmethod.latin'
-        testApplicationId 'org.futo.inputmethod.latin.tests'
+        applicationId 'com.gracie.keyboard'
+        testApplicationId 'com.gracie.keyboard.tests'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = false
     }
@@ -288,7 +290,7 @@ android {
             versionNameSuffix "-unstable"
 
             buildConfigField "boolean", "IS_PLAYSTORE_BUILD", "false"
-            buildConfigField "boolean", "UPDATE_CHECKING", "true"
+            buildConfigField "boolean", "UPDATE_CHECKING", "false"
             buildConfigField "boolean", "UPDATE_CHECKING_NETWORK", "false"
             buildConfigField "String", "BRANCH", "\"${getBranch()}\""
             getIsDefault().set(true)
@@ -299,7 +301,7 @@ android {
         stable {
             dimension "buildType"
             buildConfigField "boolean", "IS_PLAYSTORE_BUILD", "false"
-            buildConfigField "boolean", "UPDATE_CHECKING", "true"
+            buildConfigField "boolean", "UPDATE_CHECKING", "false"
             buildConfigField "boolean", "UPDATE_CHECKING_NETWORK", "false"
             buildConfigField "String", "BRANCH", "\"${getBranch()}\""
 

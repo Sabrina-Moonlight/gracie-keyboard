@@ -151,7 +151,8 @@ public final class InputAttributes {
                 || InputTypeUtils.isEmailVariation(variation)
                 || InputType.TYPE_TEXT_VARIATION_URI == variation
                 || InputType.TYPE_TEXT_VARIATION_FILTER == variation
-                || (flagNoSuggestions && !flagAutoCorrect && variation != InputType.TYPE_TEXT_VARIATION_WEB_EDIT_TEXT)
+                // Gracie's Keyboard: se corrige tambien donde la app no lo pide.
+                // Solo se apaga en contrasenas, correo, URL, filtros y campos de codigo.
                 || mIsCodeField;
 
         // TODO: Firefox-based browsers don't set it to WEB_EDIT_TEXT
@@ -184,7 +185,9 @@ public final class InputAttributes {
             noLearning = (mEditorInfo.imeOptions & EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0;
         }
 
-        mNoLearning = noLearning || mIsPasswordField || mIsCodeField;
+        // Gracie's Keyboard: tampoco se aprende en campos de correo ni de direcciones web.
+        mNoLearning = noLearning || mIsPasswordField || mIsCodeField || mIsEmailField
+                || InputType.TYPE_TEXT_VARIATION_URI == variation;
 
         final Map<String, String> privateImeOptions = parsePrivateImeOptions(editorInfo);
         if(privateImeOptions.containsKey("org.futo.inputmethod.latin.ForceLocale")) {

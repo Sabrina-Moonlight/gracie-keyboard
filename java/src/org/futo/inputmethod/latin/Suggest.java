@@ -39,6 +39,7 @@ import java.util.Locale;
 import java.util.Set;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 /**
  * This class loads a dictionary and provides a list of suggestions for a given sequence of
@@ -164,7 +165,76 @@ public final class Suggest {
             final Locale locale, final SuggestionResults suggestionResults,
             final float autoCorrectionThreshold, final boolean numberRowActive
     ) {
+        return obtainNonBatchedInputSuggestedWords(wordComposer, inputStyleIfNotPrediction,
+                isCorrectionEnabled, sequenceNumber, locale, suggestionResults,
+                autoCorrectionThreshold, numberRowActive, null);
+    }
+
+    // Gracie's Keyboard: Spanish words that almost always carry an accent but are valid
+    // without it (so the dictionary never corrects them).
+    private static final java.util.List<String> PAST_HINT_WORDS = java.util.Arrays.asList(
+            "yo", "ya", "ayer", "anoche", "anteayer", "reci\u00e9n", "recien", "apenas", "luego",
+            "despu\u00e9s", "despues", "entonces", "hoy", "ahorita");
+
+    private static String getSpanishAccentFix(final Locale locale, final String typed,
+            @Nullable final NgramContext ngramContext,
+            @Nullable final SuggestionResults suggestionResults) {
+        if (locale == null || !"es".equals(locale.getLanguage()) || typed == null) return null;
+        final String lower = typed.toLowerCase(Locale.ROOT);
+        final String fixed;
+        switch (lower) {
+            case "adios": fixed = "adi\u00f3s"; break;
+            case "ademas": fixed = "adem\u00e1s"; break;
+            case "mama":
+            case "papa": {
+                // "mi papa" yes, "la papa" (potato) / "el papa" (pope) no.
+                final CharSequence prev = ngramContext == null ? null : ngramContext.getNthPrevWord(1);
+                if (prev == null) return null;
+                final String p = prev.toString().toLowerCase(Locale.ROOT);
+                if (!p.equals("mi") && !p.equals("tu") && !p.equals("su")) return null;
+                fixed = lower.equals("mama") ? "mam\u00e1" : "pap\u00e1";
+                break;
+            }
+            default: {
+                // "termine" -> "termin\u00e9" after "yo/ya/ayer..." (only if the dictionary knows it)
+                if (lower.length() < 5 || !lower.endsWith("e") || suggestionResults == null) return null;
+                final CharSequence prev = ngramContext == null ? null : ngramContext.getNthPrevWord(1);
+                if (prev == null || !PAST_HINT_WORDS.contains(prev.toString().toLowerCase(Locale.ROOT))) {
+                    return null;
+                }
+                final String candidate = lower.substring(0, lower.length() - 1) + "\u00e9";
+                boolean known = false;
+                for (final SuggestedWordInfo info : suggestionResults) {
+                    if (candidate.equalsIgnoreCase(info.mWord)) { known = true; break; }
+                }
+                if (!known) return null;
+                fixed = candidate;
+            }
+        }
+        return Character.isUpperCase(typed.charAt(0))
+                ? Character.toUpperCase(fixed.charAt(0)) + fixed.substring(1)
+                : fixed;
+    }
+
+    public static SuggestedWords obtainNonBatchedInputSuggestedWords(
+            final WordComposer wordComposer, final int inputStyleIfNotPrediction,
+            final boolean isCorrectionEnabled, final int sequenceNumber,
+            final Locale locale, final SuggestionResults suggestionResults,
+            final float autoCorrectionThreshold, final boolean numberRowActive,
+            @Nullable final NgramContext ngramContext
+    ) {
         final String typedWordString = wordComposer.getTypedWord();
+        if (wordComposer.isComposingWord()) {
+            final String accentFix = getSpanishAccentFix(locale, typedWordString, ngramContext,
+                    suggestionResults);
+            if (accentFix != null) {
+                suggestionResults.add(new SuggestedWordInfo(accentFix, "" /* prevWordsContext */,
+                        SuggestedWordInfo.MAX_SCORE - 1, SuggestedWordInfo.KIND_WHITELIST,
+                        Dictionary.DICTIONARY_USER_TYPED,
+                        SuggestedWordInfo.NOT_AN_INDEX /* indexOfTouchPointOfSecondWord */,
+                        SuggestedWordInfo.NOT_A_CONFIDENCE /* autoCommitFirstWordConfidence */));
+            }
+        }
         final int trailingSingleQuotesCount =
                 StringUtils.getTrailingSingleQuotesCount(typedWordString);
         final String consideredWord = trailingSingleQuotesCount > 0
@@ -254,6 +324,9 @@ public final class Suggest {
                 // TODO: we may want to have shortcut-only entries auto-correct in the future.
                 || suggestionResults.first().isKindOf(SuggestedWordInfo.KIND_SHORTCUT)
                 // Don't do it if it looks like a URL (or email address)
+                // Spanish: "esperale"/"contale" are verb + "le", don't turn them into "-se"
+                || isLeChangedToSe(typedWordString, suggestionResults.first().mWord)
+                || isInformalSpanishChange(locale, typedWordString, suggestionResults.first().mWord)
                 || StringUtils.lastPartLooksLikeURL(typedWordString)) {
             hasAutoCorrection = false;
         } else {
@@ -339,7 +412,7 @@ public final class Suggest {
         callback.onGetSuggestedWords(
             obtainNonBatchedInputSuggestedWords(wordComposer, inputStyleIfNotPrediction,
                 isCorrectionEnabled, sequenceNumber, locale, suggestionResults, mAutoCorrectionThreshold,
-                    keyboard.mId.mNumberRow)
+                    keyboard.mId.mNumberRow, ngramContext)
         );
     }
 
@@ -430,6 +503,50 @@ public final class Suggest {
             suggestionsList.add(cur);
         }
         return suggestionsList;
+    }
+
+    private static char baseFirstChar(final String w) {
+        final String n = java.text.Normalizer.normalize(w, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "").toLowerCase(Locale.ROOT);
+        return n.isEmpty() ? 0 : n.charAt(0);
+    }
+
+    // Spanish: informal words ("wacho", "andate", "hacelo") should not be turned into other
+    // words. Real typos like b/v, c/s/z/k/q, g/j or a missing silent h are still corrected.
+    private static boolean isInformalSpanishChange(final Locale locale, final String typed,
+            final String suggestion) {
+        if (locale == null || !"es".equals(locale.getLanguage())) return false;
+        if (typed == null || suggestion == null || typed.length() < 3) return false;
+
+        final char a = baseFirstChar(typed);
+        final char b = baseFirstChar(suggestion);
+        if (a != b && a != 'h' && b != 'h') {
+            final String[] groups = { "bv", "cszkq", "gj" };
+            boolean sameGroup = false;
+            for (final String g : groups) {
+                if (g.indexOf(a) >= 0 && g.indexOf(b) >= 0) sameGroup = true;
+            }
+            if (!sameGroup) return true;
+        }
+
+        // "hacelo" -> "hacerlo": verb + pronoun with the "r" missing
+        final String t = typed.toLowerCase(Locale.ROOT);
+        final String sg = suggestion.toLowerCase(Locale.ROOT);
+        for (final String c : new String[] { "los", "las", "les", "lo", "la", "le", "nos", "me", "te", "se" }) {
+            if (t.length() >= 5 && t.endsWith(c)
+                    && sg.equals(t.substring(0, t.length() - c.length()) + "r" + c)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isLeChangedToSe(final String typed, final String suggestion) {
+        if (typed == null || suggestion == null) return false;
+        final String t = typed.toLowerCase(Locale.ROOT);
+        final String sg = suggestion.toLowerCase(Locale.ROOT);
+        return t.length() >= 5 && t.endsWith("le")
+                && sg.equals(t.substring(0, t.length() - 2) + "se");
     }
 
     /**

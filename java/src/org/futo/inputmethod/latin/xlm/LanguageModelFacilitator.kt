@@ -379,7 +379,8 @@ public class LanguageModelFacilitator(
             locale,
             suggestionResults,
             settingsValues.mAutoCorrectionThreshold,
-            settingsValues.mIsNumberRowEnabled
+            settingsValues.mIsNumberRowEnabled,
+            values.ngramContext
         )
 
 

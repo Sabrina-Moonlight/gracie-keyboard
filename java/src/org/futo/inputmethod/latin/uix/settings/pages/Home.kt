@@ -136,24 +136,6 @@ val HomeScreenLite = UserSettingsMenu(
             icon = R.drawable.themes
         ),
 
-        //if(!isPaid) {
-        userSettingNavigationItem(
-            title = R.string.payment_screen_short_title,
-            style = NavigationItemStyle.HomePrimary,
-            navigateTo = "payment",
-            icon = R.drawable.dollar_sign,
-        ).copy(visibilityCheck = {
-            useDataStoreValue(IS_ALREADY_PAID) == false
-        }, appearInSearchIfVisibilityCheckFailed = false),
-        //}
-
-        userSettingNavigationItem(
-            title = R.string.help_menu_title,
-            style = NavigationItemStyle.HomeSecondary,
-            navigateTo = "help",
-            icon = R.drawable.help_circle
-        ),
-
         //if(isDeveloper || LocalInspectionMode.current) {
         userSettingNavigationItem(
             title = R.string.dev_settings_title,
@@ -171,11 +153,6 @@ val HomeScreenLite = UserSettingsMenu(
             navigateTo = "misc",
         ),
 
-        userSettingNavigationItem(
-            title = R.string.credits_menu_title,
-            style = NavigationItemStyle.MiscNoArrow,
-            navigateTo = "credits",
-        ),
     )
 )
 
@@ -185,7 +162,6 @@ fun HomeScreen(navController: NavHostController = rememberNavController()) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
     val isDeveloper = useDataStoreValue(IS_DEVELOPER)
-    val isPaid = useDataStoreValue(IS_ALREADY_PAID)
 
     Column {
         Column(
@@ -211,23 +187,10 @@ fun HomeScreen(navController: NavHostController = rememberNavController()) {
                 }
             }
 
-            ConditionalMigrateUpdateNotice()
-            ConditionalUnpaidNoticeWithNav(navController)
-
             HomeScreenLite.render(showTitle = false)
 
 
             Spacer(modifier = Modifier.height(16.dp))
-
-            if(isPaid || LocalInspectionMode.current) {
-                Text(
-                    stringResource(R.string.payment_paid_version_indicator),
-                    style = Typography.SmallMl,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-            }
 
             Text(
                 "v${BuildConfig.VERSION_NAME}",

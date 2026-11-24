@@ -53,6 +53,24 @@ class SuggestionBlacklist(val settings: Settings, val context: Context, val life
         return true
     }
 
+    // Short all-caps words like "UE", "SA", "IE" are almost never what the person wants.
+    private val allowedAcronyms = setOf(
+        "OK", "TV", "PC", "ID", "DJ", "CD", "WC", "UK", "USA", "DVD", "USB", "PDF", "GPS",
+        "SMS", "CEO", "DNI", "IVA", "ONU", "FBI", "ADN", "VIP", "SOS"
+    )
+
+    private fun isJunkAcronym(info: SuggestedWordInfo, typedIsAllCaps: Boolean): Boolean {
+        if(typedIsAllCaps) return false
+        if(info.isKindOf(SuggestedWordInfo.KIND_TYPED)
+            || info.isKindOf(SuggestedWordInfo.KIND_EMOJI_SUGGESTION)) return false
+        if(info.mSourceDict?.mDictType == Dictionary.TYPE_USER) return false
+
+        val w = info.mWord
+        if(w.length < 2 || w.length > 3) return false
+        if(!w.all { it.isLetter() && it.isUpperCase() }) return false
+        return w !in allowedAcronyms
+    }
+
     fun isSuggestedWordOk(word: SuggestedWordInfo): Boolean {
         return word.isKindOf(SuggestedWordInfo.KIND_TYPED) || isWordOk(word.mWord)
     }
@@ -65,7 +83,12 @@ class SuggestionBlacklist(val settings: Settings, val context: Context, val life
             else -> suggestions.mTypedWordInfo
         }
 
-        val filter: (SuggestedWordInfo) -> Boolean = { it -> isSuggestedWordOk(it) || (it == typedWord) }
+        val typedText = suggestions.mTypedWordInfo?.mWord ?: ""
+        val typedIsAllCaps = typedText.length >= 2 && typedText.all { it.isUpperCase() }
+
+        val filter: (SuggestedWordInfo) -> Boolean = { it ->
+            (isSuggestedWordOk(it) && !isJunkAcronym(it, typedIsAllCaps)) || (it == typedWord)
+        }
 
         val shouldStillAutocorrect = suggestions.mWillAutoCorrect
                 && (suggestions.size() > SuggestedWords.INDEX_OF_AUTO_CORRECTION)
