@@ -1,0 +1,50 @@
+name: Release
+
+# Compila el APK y lo publica en Releases.
+# Se firma con la debug key del proyecto (java/shared.keystore).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      VERSION_CODE: ${{ github.run_number }}
+      VERSION_NAME: 1.0.${{ github.run_number }}
+      BRANCH_NAME: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Instalar Android SDK y NDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358" "cmake;3.22.1" >/dev/null
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Compilar
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleStableRelease -s --no-daemon
+
+      - name: Preparar APK
+        run: |
+          APK=$(find build/outputs/apk/stable/release -name '*.apk' | head -n 1)
+          test -n "$APK"
+          cp "$APK" "gracie-keyboard-v${VERSION_NAME}.apk"
+          echo "APK_FILE=gracie-keyboard-v${VERSION_NAME}.apk" >> "$GITHUB_ENV"
+
+      - name: Publicar release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${VERSION_NAME}" "$APK_FILE" --title "Gracie's Keyboard ${VERSION_NAME}" --notes "Compilacion automatica #${{ github.run_number }}"

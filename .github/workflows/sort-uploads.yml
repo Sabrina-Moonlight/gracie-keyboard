@@ -1,0 +1,90 @@
+name: Sort Uploads
+
+# Abre los ZIP de 0-sort-uploads/ (en orden alfabetico), coloca los archivos,
+# borra el ZIP y lanza el release.
+on:
+  push:
+    paths:
+      - "0-sort-uploads/*.zip"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: sort-uploads
+  cancel-in-progress: false
+
+jobs:
+  sort:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Abrir ZIP y colocar archivos
+        run: |
+          set -u
+          FAIL=0
+          shopt -s nullglob
+          ZIPS=(0-sort-uploads/*.zip)
+          if [ ${#ZIPS[@]} -eq 0 ]; then echo "No hay ZIP"; exit 0; fi
+          IFS=$'\n' ZIPS=($(printf '%s\n' "${ZIPS[@]}" | sort)); unset IFS
+          for Z in "${ZIPS[@]}"; do
+            echo "=== $Z ==="
+            T=$(mktemp -d)
+            if ! unzip -q -o "$Z" -d "$T"; then echo "::error::No se pudo abrir $Z"; FAIL=1; rm -f "$Z"; continue; fi
+            # Ignorar lo prohibido
+            rm -rf "$T/.github" "$T/.git" "$T/LICENSE" "$T/LICENSE.md" "$T/claude.md" "$T/grok.md"
+            find "$T" -type f \( -name '*.jks' -o -name '*.keystore' \) -delete
+            # DELETE.txt
+            if [ -f "$T/DELETE.txt" ]; then
+              while IFS= read -r L || [ -n "$L" ]; do
+                L=$(echo "$L" | tr -d '\r'); [ -z "$L" ] && continue
+                case "$L" in .github*|*LICENSE*|.git*|*/) echo "::error::No se borra: $L"; FAIL=1; continue;; esac
+                if [ -f "$L" ]; then git rm -q -f -- "$L"; echo "borrado $L"
+                else echo "::error::No existe para borrar: $L"; FAIL=1; fi
+              done < "$T/DELETE.txt"
+              rm -f "$T/DELETE.txt"
+            fi
+            # ROUTES.txt: Nombre.ext = ruta/completa/Nombre.ext
+            if [ -f "$T/ROUTES.txt" ]; then
+              while IFS= read -r L || [ -n "$L" ]; do
+                L=$(echo "$L" | tr -d '\r'); [ -z "$L" ] && continue
+                SRC=$(echo "${L%%=*}" | sed 's/[[:space:]]*$//; s/^[[:space:]]*//')
+                DST=$(echo "${L#*=}" | sed 's/[[:space:]]*$//; s/^[[:space:]]*//')
+                case "$DST" in .github*) echo "::error::Ruta prohibida: $DST"; FAIL=1; continue;; esac
+                if [ -f "$T/$SRC" ]; then mkdir -p "$(dirname "$DST")"; mv -f "$T/$SRC" "$DST"; echo "ruta $SRC -> $DST"
+                else echo "::error::ROUTES apunta a un archivo que no esta: $SRC"; FAIL=1; fi
+              done < "$T/ROUTES.txt"
+              rm -f "$T/ROUTES.txt"
+            fi
+            # Resto: pisa lo que cambia
+            rsync -a "$T"/ ./
+            rm -rf "$T"
+            git rm -q -f -- "$Z" 2>/dev/null || rm -f "$Z"
+          done
+          echo "FAIL=$FAIL" >> "$GITHUB_ENV"
+
+      - name: Subir cambios
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          mkdir -p 0-sort-uploads && touch 0-sort-uploads/.gitkeep
+          git add -A
+          if git diff --cached --quiet; then echo "Nada que subir"; else
+            git commit -q -m "Sort Uploads"
+            git push
+          fi
+
+      - name: Lanzar release
+        if: env.FAIL == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run release.yml --ref "${{ github.ref_name }}"
+
+      - name: Avisar si hubo errores
+        if: env.FAIL != '0'
+        run: |
+          echo "::error::Hubo errores al ordenar. No se lanzo el release."
+          exit 1
