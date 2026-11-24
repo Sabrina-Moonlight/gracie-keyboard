@@ -166,21 +166,6 @@ tasks.register('updateBundleResources', Exec) {
     ]
 }
 
-tasks.register('updateContributors') {
-    def script = file('tools/contributors.py')
-    def outputFile = file('java/src/org/futo/inputmethod/latin/uix/settings/pages/credits/Contributors.kt')
-
-    inputs.file script
-    outputs.file outputFile
-
-    doLast {
-        exec {
-            environment 'GITHUB_TOKEN', System.getenv('GITHUB_TOKEN') ?: ''
-            commandLine 'python3', script.absolutePath
-        }
-    }
-}
-
 preBuild.dependsOn updateLocales
 
 android {

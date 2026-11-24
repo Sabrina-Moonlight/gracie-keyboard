@@ -2,6 +2,8 @@ package org.futo.inputmethod.latin.uix.settings
 
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.navigation.NavGraphBuilder
@@ -135,7 +137,8 @@ fun SettingsNavigator(
             enterTransition = { EnterTransition.None },
             exitTransition = { ExitTransition.None },
             popEnterTransition = { EnterTransition.None },
-            popExitTransition = { ExitTransition.None }
+            // Al volver atrás, la pantalla que sale se desvanece rápido en vez de quedarse pegada sobre Home
+            popExitTransition = { fadeOut(tween(90)) }
         ) {
             with(NavGraphBuilderWrapper(this)) {
                 composable<Route.AddLayout> { SelectLayoutsScreen(nav, it.lang.toLocale()) }
